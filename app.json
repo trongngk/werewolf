@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "Quản trò Ma Sói",
+    "slug": "werewolf-moderator",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/werewolf-logo.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/werewolf-logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.werewolf.moderator",
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/werewolf-logo.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}
