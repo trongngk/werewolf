@@ -154,6 +154,9 @@ export default function App() {
 
 function NightAction({ game, role, onChange }: { game: Game; role: Role; onChange: (game: Game) => void }) {
   const night = game.night ?? { witchSaved: false };
+  if (['guard', 'hunter', 'witch', 'sorceress', 'spellcaster'].includes(role.id) && !isRoleAlive(game, role.id)) {
+    return <Text style={styles.hint}>{role.name} đã chết. Lượt gọi này chỉ để che giấu thông tin — không chọn mục tiêu.</Text>;
+  }
   if (role.id === 'guard') return <NightTarget title="Chọn người được bảo vệ" game={game} field="guardTargetId" selectedId={night.guardTargetId} onChange={onChange}
     disabled={(player) => !isGuardTargetAllowed(game, player.id)} disabledLabel="Đã bảo vệ đêm trước" />;
   if (role.id === 'werewolf') return <NightTarget title="Chọn người bị cắn" game={game} field="wolfTargetId" selectedId={night.wolfTargetId} onChange={onChange}

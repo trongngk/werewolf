@@ -62,9 +62,9 @@ export const togglePlayerStatus = (game: Game, playerId: string): Game => {
 export const hangPlayer = (game: Game, playerId: string): Game => {
   const player = game.players.find((item) => item.id === playerId);
   if (!player || player.status === 'dead') return game;
-  if (player.roleId === 'prince') {
-    const message = `${player.name} là Hoàng tử. Lá bài được lật lên và ${player.name} không bị treo cổ.`;
-    return { ...game, dayMessages: [message], history: appendHistory(game, [`Ngày ${game.currentRound}: ${message}`]) };
+  if (player.roleId === 'prince' && !game.princeRevealed) {
+    const message = `${player.name} là Hoàng tử. Lá bài được lật lên và ${player.name} không bị treo cổ. Lá bài chỉ dùng được một lần, lần sau Hoàng tử sẽ bị treo như thường.`;
+    return { ...game, princeRevealed: true, dayMessages: [message], history: appendHistory(game, [`Ngày ${game.currentRound}: ${message}`]) };
   }
   const deaths = new Set([playerId]);
   const messages = [`${player.name} đã bị treo cổ.`];

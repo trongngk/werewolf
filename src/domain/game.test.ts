@@ -211,11 +211,15 @@ describe('game domain', () => {
     ]);
   });
 
-  test('prince survives hanging with a card reveal message', () => {
-    const game = gameWithAssignments({ An: 'prince', Bình: 'werewolf', Chi: 'villager' });
-    const resolved = hangPlayer(game, game.players[0].id);
-    expect(resolved.players[0].status).toBe('alive');
-    expect(resolved.dayMessages).toContain('An là Hoàng tử. Lá bài được lật lên và An không bị treo cổ.');
+  test('prince survives the first hanging only', () => {
+    const game = gameWithAssignments({ An: 'prince', Bình: 'werewolf', Chi: 'villager', Dũng: 'villager' });
+    const firstHang = hangPlayer(game, game.players[0].id);
+    expect(firstHang.players[0].status).toBe('alive');
+    expect(firstHang.princeRevealed).toBe(true);
+    expect(firstHang.dayMessages).toContain('An là Hoàng tử. Lá bài được lật lên và An không bị treo cổ. Lá bài chỉ dùng được một lần, lần sau Hoàng tử sẽ bị treo như thường.');
+    const secondHang = hangPlayer(firstHang, game.players[0].id);
+    expect(secondHang.players[0].status).toBe('dead');
+    expect(secondHang.dayMessages).toContain('An đã bị treo cổ.');
   });
 
   test('sorceress identifies whether a player is the seer', () => {

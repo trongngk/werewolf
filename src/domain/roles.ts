@@ -40,7 +40,7 @@ export const DEFAULT_ROLES: Role[] = [
   role('desperate', 'Kẻ chán đời', '🎭', 'neutral', 'Thắng nếu bị dân làng treo cổ.', 'Gọi để xác định vai trong đêm đầu.', {
     wakesAtNight: true, firstNightOnly: true, nightOrder: 10,
   }),
-  role('prince', 'Hoàng tử', '👑', 'villager', 'Khi bị treo cổ, lật lá bài lên và tiếp tục sống.', 'Gọi để xác định vai trong đêm đầu.', {
+  role('prince', 'Hoàng tử', '👑', 'villager', 'Lần đầu bị treo cổ, lật lá bài lên và tiếp tục sống. Chỉ dùng được một lần.', 'Gọi để xác định vai trong đêm đầu.', {
     wakesAtNight: true, firstNightOnly: true, nightOrder: 15,
   }),
   role('cupid', 'Cupid', '💘', 'villager', 'Ghép đôi hai người chơi trong Đêm 0.', 'Xác định người giữ vai Cupid, sau đó chọn hai người yêu nhau.', {

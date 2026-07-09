@@ -42,6 +42,7 @@ export type Game = {
   roles: Role[];
   lovers?: string[];
   nurturedChildId?: string;
+  princeRevealed?: boolean;
   lastGuardTargetId?: string;
   lastHunterTargetId?: string;
   silencedPlayerId?: string;
