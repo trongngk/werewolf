@@ -1,8 +1,8 @@
 import { DEFAULT_ROLES, suggestRoleCounts } from './roles';
 import { Game } from './types';
 import {
-  beginNight, completeNightZero, createGame, evaluateWinner, getNightRoles, getPlayersForRole, getSeerResult, getSorceressResult, hangPlayer, isGuardTargetAllowed,
-  resolveNight, selectNightTarget, toggleLover, togglePlayerStatus, toggleRoleAssignment, toggleWitchSave,
+  beginNight, canApprenticeSee, completeNightZero, createGame, evaluateWinner, getNightRoles, getPlayersForRole, getSeerResult, getSorceressResult, hangPlayer,
+  isGuardTargetAllowed, isRoleAlive, resolveNight, selectNightTarget, setNurturedChild, toggleLover, togglePlayerStatus, toggleRoleAssignment, toggleWitchSave,
 } from './game';
 
 const rolesWith = (counts: Record<string, number>) =>
@@ -82,6 +82,78 @@ describe('game domain', () => {
     game = selectNightTarget(game, 'wolfTargetId', game.players[1].id);
     game = resolveNight(game);
     expect(game.players.slice(0, 2).map((player) => player.status)).toEqual(['dead', 'dead']);
+  });
+
+  test('young mother cannot nurture herself but can nurture others', () => {
+    const base = gameWithAssignments({ An: 'young-mother', Bình: 'villager' });
+    expect(setNurturedChild(base, base.players[0].id).nurturedChildId).toBeUndefined();
+    expect(setNurturedChild(base, base.players[1].id).nurturedChildId).toBe(base.players[1].id);
+  });
+
+  test('nurtured child dies with the young mother but not the other way around', () => {
+    const base = gameWithAssignments({ An: 'young-mother', Bình: 'villager', Chi: 'werewolf' });
+    const linked = { ...base, nurturedChildId: base.players[1].id };
+
+    let motherDies = beginNight(linked);
+    motherDies = selectNightTarget(motherDies, 'wolfTargetId', linked.players[0].id);
+    motherDies = resolveNight(motherDies);
+    expect(motherDies.players.slice(0, 2).map((player) => player.status)).toEqual(['dead', 'dead']);
+    expect(motherDies.morningMessages).toContain('Bình chết theo Mẹ trẻ.');
+
+    let childDies = beginNight(linked);
+    childDies = selectNightTarget(childDies, 'wolfTargetId', linked.players[1].id);
+    childDies = resolveNight(childDies);
+    expect(childDies.players.slice(0, 2).map((player) => player.status)).toEqual(['alive', 'dead']);
+  });
+
+  test('apprentice seer is called every night, right after the seer', () => {
+    const game = createGame(['An', 'Bình', 'Chi'], rolesWith({ seer: 1, 'apprentice-seer': 1, werewolf: 1 }));
+    expect(getNightRoles(game).map((role) => role.id)).toEqual(['werewolf', 'seer', 'apprentice-seer']);
+    expect(getNightRoles({ ...game, currentRound: 3 }).map((role) => role.id)).toEqual(['werewolf', 'seer', 'apprentice-seer']);
+  });
+
+  test('apprentice seer may only see once the seer is dead', () => {
+    const base = gameWithAssignments({ An: 'seer', Bình: 'apprentice-seer', Chi: 'villager', Dũng: 'werewolf' });
+    expect(canApprenticeSee(base)).toBe(false);
+    let game = beginNight(base);
+    game = selectNightTarget(game, 'wolfTargetId', base.players[0].id);
+    game = resolveNight(game);
+    expect(game.players[0].status).toBe('dead');
+    expect(game.players[1].roleId).toBe('apprentice-seer');
+    expect(isRoleAlive(game, 'seer')).toBe(false);
+    expect(canApprenticeSee(game)).toBe(true);
+    expect(game.morningMessages).toContain('Tiên tri đã chết. Từ đêm sau, Bình (Tiên tri tập sự) sẽ soi thay. Vẫn gọi Tiên tri mỗi đêm để che giấu thông tin.');
+  });
+
+  test('hanging the seer also notes the apprentice handover', () => {
+    const base = gameWithAssignments({ An: 'seer', Bình: 'apprentice-seer', Chi: 'villager', Dũng: 'werewolf' });
+    const resolved = hangPlayer(base, base.players[0].id);
+    expect(canApprenticeSee(resolved)).toBe(true);
+    expect(resolved.dayMessages).toContain('Tiên tri đã chết. Từ đêm sau, Bình (Tiên tri tập sự) sẽ soi thay. Vẫn gọi Tiên tri mỗi đêm để che giấu thông tin.');
+  });
+
+  test('dead apprentice cannot take over the sight', () => {
+    const base = gameWithAssignments({ An: 'seer', Bình: 'apprentice-seer', Chi: 'villager', Dũng: 'werewolf' });
+    const apprenticeDead = { ...base, players: base.players.map((player) => player.roleId === 'apprentice-seer' ? { ...player, status: 'dead' as const } : player) };
+    const resolved = hangPlayer(apprenticeDead, base.players[0].id);
+    expect(canApprenticeSee(resolved)).toBe(false);
+    expect(resolved.dayMessages).toEqual(['An đã bị treo cổ.']);
+  });
+
+  test('sorceress finds the acting apprentice seer after the seer dies', () => {
+    const base = gameWithAssignments({ An: 'seer', Bình: 'apprentice-seer', Chi: 'sorceress', Dũng: 'werewolf' });
+    expect(getSorceressResult(base, base.players[1].id)).toBe('Không phải Tiên tri');
+    const seerDead = { ...base, players: base.players.map((player) => player.roleId === 'seer' ? { ...player, status: 'dead' as const } : player) };
+    expect(getSorceressResult(seerDead, seerDead.players[1].id)).toBe('Là Tiên tri');
+  });
+
+  test('apprentice seer and young mother are suggested only above 25 players', () => {
+    const twentyFive = suggestRoleCounts(25);
+    expect(twentyFive['apprentice-seer']).toBeUndefined();
+    expect(twentyFive['young-mother']).toBeUndefined();
+    const twentySix = suggestRoleCounts(26);
+    expect(twentySix['apprentice-seer']).toBe(1);
+    expect(twentySix['young-mother']).toBe(1);
   });
 
   test('cursed player becomes a wolf instead of dying from a successful bite', () => {

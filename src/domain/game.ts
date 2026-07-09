@@ -68,12 +68,13 @@ export const hangPlayer = (game: Game, playerId: string): Game => {
   }
   const deaths = new Set([playerId]);
   const messages = [`${player.name} đã bị treo cổ.`];
-  addLoverDeaths(game, deaths, messages);
+  cascadeDeaths(game, deaths, messages);
   if (player.roleId === 'hunter' && game.lastHunterTargetId && game.lastHunterTargetId !== playerId) {
     deaths.add(game.lastHunterTargetId);
     messages.push(`${playerName(game, game.lastHunterTargetId)} chết theo do kỹ năng Thợ săn.`);
-    addLoverDeaths(game, deaths, messages);
+    cascadeDeaths(game, deaths, messages);
   }
+  noteSeerHandover(game, deaths, messages);
   const updated = applyDeaths(game, deaths).game;
   const loggedMessages = messages.map((message) => `Ngày ${game.currentRound}: ${message}`);
   if (player.roleId === 'desperate') {
@@ -119,6 +120,12 @@ export const toggleLover = (game: Game, playerId: string): Game => {
   };
 };
 
+export const setNurturedChild = (game: Game, playerId: string): Game => {
+  const mother = game.players.find((player) => player.roleId === 'young-mother');
+  if (mother?.id === playerId) return game;
+  return { ...game, nurturedChildId: game.nurturedChildId === playerId ? undefined : playerId };
+};
+
 export const toggleWitchSave = (game: Game): Game => {
   if (!game.witchHealAvailable || !game.night?.wolfTargetId) return game;
   return { ...game, night: { ...game.night, witchSaved: !game.night.witchSaved } };
@@ -127,9 +134,18 @@ export const toggleWitchSave = (game: Game): Game => {
 export const isGuardTargetAllowed = (game: Game, playerId: string) =>
   playerId !== game.lastGuardTargetId;
 
+export const isRoleAlive = (game: Game, roleId: string) =>
+  game.players.some((player) => player.roleId === roleId && player.status === 'alive');
+
+// Tiên tri tập sự chỉ được soi khi không còn Tiên tri sống.
+export const canApprenticeSee = (game: Game) =>
+  isRoleAlive(game, 'apprentice-seer') && !isRoleAlive(game, 'seer');
+
 export const getSorceressResult = (game: Game, playerId: string) => {
   const player = game.players.find((item) => item.id === playerId);
-  return player?.roleId === 'seer' ? 'Là Tiên tri' : 'Không phải Tiên tri';
+  const isActingSeer = player?.roleId === 'seer'
+    || (player?.roleId === 'apprentice-seer' && canApprenticeSee(game));
+  return isActingSeer ? 'Là Tiên tri' : 'Không phải Tiên tri';
 };
 
 export const getSeerResult = (game: Game, playerId: string) => {
@@ -150,14 +166,14 @@ export const resolveNight = (game: Game): Game => {
 
   if (night.wolfTargetId && !wolfWasBlocked && !night.witchSaved && !cursedTransforms) deaths.add(night.wolfTargetId);
   if (night.witchPoisonTargetId) deaths.add(night.witchPoisonTargetId);
-  addLoverDeaths(resolutionGame, deaths, messages);
+  cascadeDeaths(resolutionGame, deaths, messages);
 
   const hunter = game.players.find((player) => player.roleId === 'hunter');
   if (hunter && deaths.has(hunter.id) && night.hunterTargetId && night.hunterTargetId !== hunter.id) {
     deaths.add(night.hunterTargetId);
     messages.push(`Thợ săn kéo theo ${playerName(game, night.hunterTargetId)}.`);
   }
-  addLoverDeaths(resolutionGame, deaths, messages);
+  cascadeDeaths(resolutionGame, deaths, messages);
 
   if (!night.wolfTargetId) messages.push('Phe Sói chưa chọn mục tiêu.');
   else if (wolfWasBlocked) messages.push(`Bảo vệ đã cứu ${playerName(game, night.wolfTargetId)} khỏi Sói.`);
@@ -170,6 +186,8 @@ export const resolveNight = (game: Game): Game => {
   messages.push(deaths.size
     ? `Người chết trong đêm: ${[...deaths].map((id) => playerName(game, id)).join(', ')}.`
     : 'Không có ai chết trong đêm.');
+
+  noteSeerHandover(game, deaths, messages);
 
   const resolved = {
     ...game,
@@ -195,17 +213,42 @@ export const resolveNight = (game: Game): Game => {
 const playerName = (game: Game, playerId: string) =>
   game.players.find((player) => player.id === playerId)?.name ?? 'người chơi';
 
-const addLoverDeaths = (game: Game, deaths: Set<string>, messages: string[]) => {
-  if (!game.lovers?.some((id) => deaths.has(id))) return;
-  game.lovers.forEach((id) => {
-    if (!deaths.has(id)) messages.push(`${playerName(game, id)} chết theo người yêu.`);
-    deaths.add(id);
-  });
+// Lan truyền các cái chết dây chuyền cho tới khi ổn định:
+// cặp đôi chết theo nhau (hai chiều) và con nuôi chết theo Mẹ trẻ (một chiều).
+const cascadeDeaths = (game: Game, deaths: Set<string>, messages: string[]) => {
+  const mother = game.players.find((player) => player.roleId === 'young-mother');
+  let changed = true;
+  while (changed) {
+    changed = false;
+    if (game.lovers?.some((id) => deaths.has(id))) {
+      game.lovers.forEach((id) => {
+        if (deaths.has(id)) return;
+        messages.push(`${playerName(game, id)} chết theo người yêu.`);
+        deaths.add(id);
+        changed = true;
+      });
+    }
+    if (mother && deaths.has(mother.id) && game.nurturedChildId && !deaths.has(game.nurturedChildId)) {
+      messages.push(`${playerName(game, game.nurturedChildId)} chết theo Mẹ trẻ.`);
+      deaths.add(game.nurturedChildId);
+      changed = true;
+    }
+  }
+};
+
+// Khi Tiên tri vừa chết mà còn Tiên tri tập sự sống, nhắc quản trò rằng từ đêm sau
+// lượt soi thuộc về tập sự. Cả hai vai vẫn được gọi mỗi đêm để che giấu thông tin.
+const noteSeerHandover = (game: Game, deaths: Set<string>, messages: string[]) => {
+  const seer = game.players.find((player) => player.roleId === 'seer');
+  if (!seer || seer.status === 'dead' || !deaths.has(seer.id)) return;
+  const apprentice = game.players.find((player) => player.roleId === 'apprentice-seer' && player.status === 'alive' && !deaths.has(player.id));
+  if (!apprentice) return;
+  messages.push(`Tiên tri đã chết. Từ đêm sau, ${apprentice.name} (Tiên tri tập sự) sẽ soi thay. Vẫn gọi Tiên tri mỗi đêm để che giấu thông tin.`);
 };
 
 const applyDeaths = (game: Game, deaths: Set<string>) => {
   const messages: string[] = [];
-  addLoverDeaths(game, deaths, messages);
+  cascadeDeaths(game, deaths, messages);
   return {
     messages,
     game: { ...game, players: game.players.map((player) => deaths.has(player.id) ? { ...player, status: 'dead' as const } : player) },

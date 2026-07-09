@@ -6,8 +6,8 @@ import {
 } from 'react-native';
 import {
   assignedCount, beginNight, completeNightZero, createGame, getAssignmentRoles, getNightRoles, getPlayerRole, hangPlayer,
-  getPlayersForRole, getSeerResult, getSorceressResult, isGuardTargetAllowed, resolveNight, selectNightTarget,
-  toggleLover, togglePlayerStatus, toggleRoleAssignment, toggleWitchSave,
+  canApprenticeSee, getPlayersForRole, getSeerResult, getSorceressResult, isGuardTargetAllowed, isRoleAlive, resolveNight, selectNightTarget,
+  setNurturedChild, toggleLover, togglePlayerStatus, toggleRoleAssignment, toggleWitchSave,
 } from './src/domain/game';
 import { DEFAULT_ROLES, suggestRoleCounts } from './src/domain/roles';
 import { Game, NightState, Player, Role, Team } from './src/domain/types';
@@ -113,7 +113,8 @@ export default function App() {
             compact={isCompactGrid(game)} onPress={() => setGame(toggleRoleAssignment(game, player.id, role))} />
         ))}</View>
         {role.id === 'cupid' && selected === role.assignmentCount && <LoverPicker game={game} onChange={setGame} />}
-        <Button label="Tiếp theo" disabled={selected !== role.assignmentCount || (role.id === 'cupid' && game.lovers?.length !== 2)} onPress={() => setAssignIndex(assignIndex + 1)} />
+        {role.id === 'young-mother' && selected === role.assignmentCount && <NurturedPicker game={game} onChange={setGame} />}
+        <Button label="Tiếp theo" disabled={selected !== role.assignmentCount || (role.id === 'cupid' && game.lovers?.length !== 2) || (role.id === 'young-mother' && !game.nurturedChildId)} onPress={() => setAssignIndex(assignIndex + 1)} />
       </Page>
     );
   }
@@ -159,13 +160,27 @@ function NightAction({ game, role, onChange }: { game: Game; role: Role; onChang
     disabled={(player) => getPlayerRole(game.roles, player)?.team === 'werewolf'} disabledLabel="Cùng phe Sói" />;
   if (role.id === 'hunter') return <NightTarget title="Chọn mục tiêu của Thợ săn" game={game} field="hunterTargetId" selectedId={night.hunterTargetId} onChange={onChange}
     disabled={(player) => player.roleId === 'hunter'} disabledLabel="Thợ săn" />;
-  if (role.id === 'seer') return (
-    <>
-      {night.seerTargetId && <Text style={styles.result}>Kết quả: {getSeerResult(game, night.seerTargetId)}</Text>}
-      <NightTarget title="Chọn người được soi" game={game} field="seerTargetId" selectedId={night.seerTargetId} onChange={onChange}
-        disabled={(player) => player.roleId === 'seer'} disabledLabel="Tiên tri" />
-    </>
-  );
+  if (role.id === 'seer') {
+    if (!isRoleAlive(game, 'seer')) return <Text style={styles.hint}>Tiên tri đã chết. Lượt gọi này chỉ để che giấu thông tin — không chọn mục tiêu. Tiên tri tập sự (nếu có) sẽ soi ở lượt của mình.</Text>;
+    return (
+      <>
+        {night.seerTargetId && <Text style={styles.result}>Kết quả: {getSeerResult(game, night.seerTargetId)}</Text>}
+        <NightTarget title="Chọn người được soi" game={game} field="seerTargetId" selectedId={night.seerTargetId} onChange={onChange}
+          disabled={(player) => player.roleId === 'seer'} disabledLabel="Tiên tri" />
+      </>
+    );
+  }
+  if (role.id === 'apprentice-seer') {
+    if (!isRoleAlive(game, 'apprentice-seer')) return <Text style={styles.hint}>Tiên tri tập sự đã chết. Lượt gọi này chỉ để che giấu thông tin.</Text>;
+    if (!canApprenticeSee(game)) return <Text style={styles.hint}>Tiên tri còn sống nên Tiên tri tập sự chưa được soi. Lượt gọi này chỉ để che giấu thông tin.</Text>;
+    return (
+      <>
+        {night.apprenticeSeerTargetId && <Text style={styles.result}>Kết quả: {getSeerResult(game, night.apprenticeSeerTargetId)}</Text>}
+        <NightTarget title="Tiên tri tập sự chọn người được soi" game={game} field="apprenticeSeerTargetId" selectedId={night.apprenticeSeerTargetId} onChange={onChange}
+          disabled={(player) => player.roleId === 'apprentice-seer'} disabledLabel="Tiên tri tập sự" />
+      </>
+    );
+  }
   if (role.id === 'sorceress') return (
     <>
       {night.sorceressTargetId && <Text style={styles.result}>Kết quả: {getSorceressResult(game, night.sorceressTargetId)}</Text>}
@@ -217,6 +232,20 @@ function LoverPicker({ game, onChange }: { game: Game; onChange: (game: Game) =>
   </>;
 }
 
+function NurturedPicker({ game, onChange }: { game: Game; onChange: (game: Game) => void }) {
+  const mother = game.players.find((player) => player.roleId === 'young-mother');
+  return <>
+    <SectionTitle text="Mẹ trẻ chọn người để nuôi nấng" />
+    <Text style={styles.hint}>Nếu Mẹ trẻ chết, người này sẽ chết theo. Người này chết thì Mẹ trẻ không sao.</Text>
+    <View style={styles.grid}>{game.players.map((player) => {
+      const selected = game.nurturedChildId === player.id;
+      const isMother = player.id === mother?.id;
+      return <PlayerChoice key={player.id} name={player.name} selected={selected} disabled={isMother}
+        helper={isMother ? 'Mẹ trẻ' : undefined} compact={isCompactGrid(game)} onPress={() => onChange(setNurturedChild(game, player.id))} />;
+    })}</View>
+  </>;
+}
+
 const isCompactGrid = (game: Game) => game.players.length > 12;
 
 function PlayerCard({ game, player, onChange }: { game: Game; player: Player; onChange: (game: Game) => void }) {
@@ -233,7 +262,7 @@ function PlayerCard({ game, player, onChange }: { game: Game; player: Player; on
       onLongPress={() => Alert.alert(`${role?.icon ?? '❔'} ${role?.name ?? 'Chưa gán vai'}`, role?.description ?? 'Người chơi này chưa có vai.')}>
       <Text style={styles.roleIcon}>{role?.icon ?? '❔'}</Text>
       <Text style={[styles.playerName, player.status === 'dead' && styles.deadText]} numberOfLines={2}>{player.name}</Text>
-      <Text style={[styles.roleName, player.status === 'dead' && styles.deadText]} numberOfLines={2}>{role?.name ?? 'Chưa gán vai'}{game.lovers?.includes(player.id) ? ' · 💞' : ''}{game.silencedPlayerId === player.id && player.status === 'alive' ? ' · 🤐' : ''}</Text>
+      <Text style={[styles.roleName, player.status === 'dead' && styles.deadText]} numberOfLines={2}>{role?.name ?? 'Chưa gán vai'}{game.lovers?.includes(player.id) ? ' · 💞' : ''}{game.nurturedChildId === player.id ? ' · 🍼' : ''}{game.silencedPlayerId === player.id && player.status === 'alive' ? ' · 🤐' : ''}</Text>
     </Pressable>
   );
 }

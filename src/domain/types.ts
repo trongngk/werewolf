@@ -28,6 +28,7 @@ export type NightState = {
   witchPoisonTargetId?: string;
   hunterTargetId?: string;
   seerTargetId?: string;
+  apprenticeSeerTargetId?: string;
   sorceressTargetId?: string;
   spellcasterTargetId?: string;
 };
@@ -40,6 +41,7 @@ export type Game = {
   players: Player[];
   roles: Role[];
   lovers?: string[];
+  nurturedChildId?: string;
   lastGuardTargetId?: string;
   lastHunterTargetId?: string;
   silencedPlayerId?: string;

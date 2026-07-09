@@ -12,10 +12,14 @@ export const loadGame = async (): Promise<Game | null> => {
     ...game,
     roles: game.roles.map((role) => {
       const defaultRole = DEFAULT_ROLES.find((item) => item.id === role.id);
+      if (!defaultRole) return { ...role, icon: role.icon ?? '⭐' };
       return {
         ...role,
-        icon: role.icon ?? defaultRole?.icon ?? '⭐',
-        team: defaultRole?.team ?? role.team,
+        icon: role.icon ?? defaultRole.icon,
+        team: defaultRole.team,
+        wakesAtNight: defaultRole.wakesAtNight,
+        firstNightOnly: defaultRole.firstNightOnly,
+        nightOrder: defaultRole.nightOrder,
       };
     }),
     witchHealAvailable: game.witchHealAvailable ?? true,
